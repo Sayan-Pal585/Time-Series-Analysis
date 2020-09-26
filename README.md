@@ -123,3 +123,5 @@ pacf(as.data.frame(data_ts), lag.max = 33)
     + Have the lowest possible AICc (when comparing multiple models having different p,d,q values)
     + Should follow the trend and seasonality based on the visual inspection
 
+For Reference :-
+1. https://otexts.com/fpp2/index.html
