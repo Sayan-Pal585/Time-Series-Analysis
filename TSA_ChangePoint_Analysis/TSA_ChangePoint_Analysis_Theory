@@ -1,0 +1,64 @@
+What is a Change-Point Analysis?
+
+A change-point analysis is performed on a series of time ordered data in order to detect whether any changes have occurred.  It determines the number of changes and estimates the time of each change.  It further provides confidence levels for each change and confidence intervals for the time of each change.
+
+Traditionally, control charts are used to detect changes.  The major difference between a change-point analysis and a control chart is that the control chart is intended to be updated following the collection of each data point.  A change-point analysis is intended to be performed less frequently to review the performance over a more extended period of time.  The two methods can be used in a complementary fashion.
+ 
+
+  AREAS OF APPLICATION:
+
+1. One of the most important areas of applications of change-point analysis is for business and financial data which consists of individual values.  Such data is frequently charted using an individuals control chart.  Individual control charts provide poor power due to the fact there is a single sample per time period.  Change-point analysis offers a more powerful, safer and more flexible tool for the retrospective analysis of such time ordered data.
+
+2. Another important area of application is following the detection of a change by a traditional control chart.  Once the control chart has detected a change, one would like to determine the root cause of the change.  Frequently it is believed that the change must have occurred between the first point outside the control limits and the previous point.  However, this is frequently not the case.  The change may actually have occurred several points earlier.  Performing a change-point analysis will help to better isolate the exact time and nature of the change.
+
+3. Another important area of application is for ill-behaved data like particle counts, microbial counts and complaint data.  Such data typically doesn't follow the commonly used distributions and may contain numerous outliers.  A change-point analysis can easily handle such ill-behaved data.
+
+4. A change-point analysis can easily handle large data sets consisting of thousands of values.  A simple control chart of such data frequently results in dozens and even hundreds of points outside the control limits, making interpretation of the control chart difficult.
+
+  BENEFITS:
+
+  A change-point analysis offers numerous benefits over conventional control charts including:
+
+1. It is more powerful at detecting smaller sustained shifts.
+
+2. It better characterizes such changes including detection of multiple changes, providing associated confidence levels, and providing confidence intervals for the times of the changes.
+
+3. The same procedure works for all types of data including attribute data, individual values, counts, averages and standard deviations.  Traditional control charts require different types of charts for each type of data.  Further, the same Change-Point Analysis works on ill-behaved data like particle counts and complaint data which do not follow any of the traditional control charting distributions and may contain numerous outliers.
+
+4. It controls the error rate for each change detected.  Traditional control charts control the pointwise error rate.  For a traditional control chart, each point plotted has a 1 in 370 chance of falsely signalling a change.  If a traditional control chart is used on a large data set consisting of 2000 points, it is expected to give 6 false signals.  For each change detected by a change-point analysis, regardless of the size of the data set, it is likely that it is real.  In fact a confidence level is provided for each change detected.
+
+5. It is much simpler to use if multiple changes have occurred.  Traditional control charts would require new limits to be established following each change in order to be able to detect further changes.
+
+6. It is robust to outliers and can be made even more robust by performing a change-point analysis on the ranks.
+
+Confidence Level for Change:-
+
+Each change detected by the change-point analysis has a confidence level associated with it.  The confidence level ranges from 0% to 100%.  The higher the confidence level, the greater the certainty that a change took place.  By default, 90% confidence is required to state that the change is significant.  You can change the required confidence level using the Advanced Options dialog box.
+
+The confidence level is based on what Statisticians call the significant level, alpha-level or p-value.  The p-value is the probability that the observed effect could have been due to the natural variation in the data assuming no change took place.  A p-value of 0.05 would indicate that the chance of the observed effect is low, 1 in 20, due to variation alone.  This is good evidence that a change took place.  A p-value of 0.5 would indicate that there is a 50-50 chance of observed effect even if no change took place.  This offers little or no evidence of a change.  The smaller the p-value, the greater the evidence of a change.
+
+The confidence level is 100*(1 - p-value).  Therefore:
+
+Confidence Level p-value
+
+          99%    0.01
+          95%    0.05
+          90%    0.1
+          80%    0.2
+          50%    0.5
+
+Confidence Interval for Time of Change:-
+
+For each change detected, a confidence interval for the time of the change is constructed.   By default, a 95% confidence interval is constructed.  You can state with 95% confidence, the change occurred within the time interval indicated by the confidence interval.
+
+Individuals Control Chart:-
+
+A control chart that can be used with individual values.  Most control charts require multiple observations per time period and are based on the average, range or standard deviation of these values.  These types of control charts cannot be used with financial data, inventory turns, loss times accidents, number of complaints and many other types of data where only a single value per time period is available.  An individuals control chart must be used for these types of data.
+
+An individuals chart can also be performed on calculated values like the average and range.  This means an individuals control chart can be used for any type of data.  However, with calculated values like the average and standard deviation, control charts specifically designed for such values are generally more powerful and thus preferred.
+
+Control charts are best suited for detecting abnormal points.  They are not nearly as powerful as a change-point analysis in detecting trends.  While a change-point analysis is better at detecting patterns, it fails to detects isolated abnormal points called outliers.  The best approach is to do both.  The change-point analysis determines the broader trends while an accompanying individuals control helps to further isolate abnormal points.
+
+For Reference:-
+1. http://members.cbio.mines-paristech.fr/~thocking/change-tutorial/RK-CptWorkshop.html
+2. https://sites.google.com/site/changepointanalysis/
