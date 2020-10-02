@@ -1,0 +1,199 @@
+Intermittent Time Series:
+
+Intermittent time series have a large number of values that are zero. These types of series commonly occur in Internet, inventory, sales, and other data where the demand 
+for a particular item is intermittent. Typically, when the value of the series associated with a particular time period is nonzero, demand occurs; and when the value is zero 
+(or missing), no demand occurs. Since it is entirely possible that the number of time periods for which no demand occurs is large, many of the series values are zero. 
+Typical time series models (for example, smoothing models) are inadequate in the case of intermittent time series because many of the series values are zero. Since these models
+are based on weighted-summations of past values, they bias forecasts away from zero. Unlike the smoothing models that provide forecasts for future time periods, 
+intermittent forecasting models provide recommended stocking levels or estimated demand per period that are used to satisfy future demand.
+
+Methods for Intermittent Demand Forecasting
+1 Introduction
+1.1 What is intermittent demand?
+Intermittent demand or ID (also known as sporadic demand) comes about when a product experiences several periods
+of zero demand. Often in these situations, when demand occurs it is small, and sometimes highly variable in size.
+ID is often experienced in industries such as aviation, automotive, defence and manufacturing; it also typically
+occurs with products nearing the end of their life cycle. Some companies operating in these areas observe ID for over
+half the products in their inventories. In such situations there is a clear financial incentive to inventory control and
+retaining proper stock levels, and therefore to forecasting demand for these items.
+1.2 Forecasting difficulties
+The many zero values in ID time-series render usual forecasting methods difficult to apply. For example, single
+exponential smoothing (SES), proposed in 1956, was the first forecasting method to be applied to intermittent
+demand. The forecast of demand in the next period is a weighted average between two quantities, defined:
+Ft+1 = αXt + (1 − α)Ft
+where Ft denotes the forecast for time period t, Xt denotes the actual demand observed in period t, and α is a
+smoothing parameter which can be adjusted between 0 and 1. Higher α will produce a forecast which is more
+responsive to recent changes in the data, whilst also being less robust to noise.
+Unfortunately, SES is known to perform poorly in forecasting for ID, since there is an upward bias in the forecast
+in the period directly after a non-zero demand. Can we develop specific forecasting methods for ID that do better?
+This report explores a few different classes of method, and also discusses some error metrics used to evaluate them.
+2 Ad-hoc forecasting methods
+The ad-hoc class of forecasting methods are not underpinned by theoretical results. However, it is often the case that
+such methods can be demonstrated to give good, robust forecasts through empirical experiments and practical use.
+These methods are, therefore, useful, and are the methods most used in industry today.
+2.1 Croston’s method
+The first ID-specific method was proposed by Croston [1]. His insight was that estimating demand probability (via
+interval size) and demand size separately was more intuitive and accurate. Let Zt be the estimate of mean non-zero
+demand size for time t, Vt the estimate of mean interval size between non-zero demands. Xt again denotes actual
+demand observed at time t, and q is the current number of consecutive zero-demand periods. Yt will denote an
+estimate of mean demand size (ie. taking zero demands into the calculation). Then:
+If Xt 6= 0 then
+
+
+
+Zt+1 = αXt + (1 − α)Zt
+Vt+1 = αq + (1 − α)Vt
+Yt+1 =
+Zt+1
+Vt+1
+If Xt = 0 then
+
+
+
+Zt+1 = Zt
+Vt+1 = Vt
+Yt+1 = Yt
+Croston showed that this process gave significantly better forecasts than SES for some ID data.
+1
+Methods for Intermittent Demand Forecasting Daniel Waller
+There are limitations to this method; the first is bias. Croston argued that for such estimates Vt and Zt
+, Yt+1
+as a forecast for the demand next period would be unbiased. However, Syntetos and Boylan [6] showed that, since
+E[X¯
+t
+] = E[
+Zt
+Vt
+] 6= E[Zt
+]
+1
+E[Vt]
+, bias is, in fact, present. Additional drawbacks include the lack of independent smoothing
+parameters for demand size and interval size, the assumption that demand size and demand interval are independent
+(this is generally too strong), and there is no way to deal with product obsolescence.
+2.2 Adjusted Croston methods
+Many adaptations of Croston’s method have been suggested to deal with some of the aforementioned issues. In [6],
+the authors propose an adjustment, known as the Syntetos-Boylan Approximation (SBA), to Croston’s forecast Yt
+,
+namely that it should be multiplied by a factor of (1 −
+α
+2
+), and claim that the new forecast will be approximately
+unbiased, since
+E
+
+1 −
+α
+2
+ 
+Zt
+Vt
+ =
+
+1 −
+α
+2
+
+E
+
+Zt
+Vt
+
+=
+
+1 −
+α
+2
+
+
+µ
+p
++
+1
+2
+∂
+2
+(
+µ
+p
+)
+∂p2
+Var(p)
+!
+=
+
+2 − α
+2
+ µ
+p
++
+α
+2 − α
+µ
+p − 1
+p
+2
+
+=
+µ
+p
+
+2 − α
+2
++
+α
+2
+p − 1
+p
+
+≈
+µ
+p
+A method incorporating the possibility of item obsolescence (where an item is no longer demanded at all) is offered by
+Teunter et al. [7]. It differs from Croston’s method and SBA in that it estimates the probability of non-zero demand
+(rather than interval size), and in that the estimates are updated every period, rather than just when demand occurs.
+Let Dt be an indicator of a non-zero demand at time t, Pt the estimate of demand for time period t. The Teunter,
+Syntetos and Babai (TSB) method is:
+If Dt = 1 then
+
+
+
+Pt+1 = β(1) + (1 − β)Pt
+Zt+1 = αXt + (1 − α)Zt
+Yt+1 = Pt+1Zt+1
+If Dt = 0 then
+
+
+
+Pt+1 = (1 − β)Pt
+Zt+1 = Zt
+Yt+1 = Pt+1Zt+1
+Note that different smoothing parameters α and β are used here for smoothing demand size and demand probability.
+The key advantage of this method is that updating the forecasts at each time period (whether demand occurs
+or not) allows the estimate Pt to approach zero if there is a long run of periods without demand. By contrast, the
+interval estimate calculated by Croston’s would remain unchanged. In a practical setting, TSB allows decisions to be
+taken over whether to continue to stock items or not. One idea might be to set some threshold for p, such that if it
+is exceeded (just once or for a number of consecutive periods) it would be decided that the product is now obsolete.
+A second, different method dealing with obsolescence was proposed recently by Prestwich et al. [5] and is known
+as Hyperbolic Exponential Smoothing (HES). The method combines the Croston method with a Bayesian approach
+to derive a new forecast, where if Zt and Vt are the smoothed estimates of demand size and interval length, and Tt
+is
+the current number of periods since a demand was last seen, then
+Ft =
+Zt
+Vt + β
+Tt
+2
+is the forecast for time t. Note β is the smoothing parameter for interval length. The main difference between TSB
+and HES is that HES decays hyperbolically over a series of zeros, whereas TSB decays only exponentially.
+
+Intermittent demand forecasting is crucial for firms and commercial activities. Recently, many researchers have focused on forecasting methods for intermittent demand and 
+proposed various forecasting techniques. The most prominent methods among these proposed techniques are the Croston method, which is based on exponential smoothing, 
+and its two popular variations: SBA (Syntetos-Boylan Approximation), SBJ (Shale-Boylan-Johnston Approximation). Croston method is widely used in forecasting of 
+intermittent demand and inventory (stock) control. Since these demands usually include zero values, using the ground breaking method developed by Croston in this data 
+becomes inevitable. Nevertheless, there are some shortcomings to this method such as producing biased forecasts and for this reason its variations have been proposed. 
+ATA method is a recently developed forecasting method which is an alternative to exponential smoothing. In this paper we propose a modification of ATA method that 
+be used for forecasting of intermittent demand. We will compare the results of the proposed approach to those of Croston and other forecasting methods used for intermittent 
+demand forecasting.
+
+For Refernce: https://www.lancaster.ac.uk/pg/waller/pdfs/Intermittent_Demand_Forecasting.pdf
