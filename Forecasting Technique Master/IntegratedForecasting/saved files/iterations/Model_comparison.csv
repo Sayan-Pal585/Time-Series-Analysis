@@ -1,0 +1,3 @@
+model,iteration_number,order,MAPE,AIC,level,trend,exog,seasonal,freq_seasonal,cycle,autoregressive,irregular,stochastic_level,stochastic_trend,stochastic_seasonal,stochastic_freq_seasonal,stochastic_cycle,damped_cycle,cycle_period_bounds,mle_regression
+ARIMA,1  - 20190207203027782935,"(4, 0, 3)",5.562997759,526.3243101,,,,,,,,,,,,,,,,
+UCM,2  - 20190207203152286185,,10.57709734,99.80772668,FALSE,FALSE,,12,,FALSE,17,TRUE,FALSE,FALSE,TRUE,,FALSE,FALSE,,TRUE

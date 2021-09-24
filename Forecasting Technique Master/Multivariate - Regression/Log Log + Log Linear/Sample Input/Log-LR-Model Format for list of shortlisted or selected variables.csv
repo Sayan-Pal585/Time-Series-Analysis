@@ -1,0 +1,17 @@
+variables,dir_flag
+Monthly.Price.Index,0
+Inflaction,0
+Avg.Max.Temp,1
+Avg.Min.Temp,1
+Avg.Precipitation.mm,0
+CPI,0
+Population.Total,1
+Nominal.GDP.Billion.USD,1
+Nominal.GDP.Per.Capita.USD,1
+Adj.Net.National.Income.Constant2010.USD,1
+Flag,NA
+,
+Note: DO NOT CHANGE THE HEADERS,
+dir_flag=1 for positively impacting variables,
+dir_flag=0 for negatively impacting variables,
+dir_flag is NA for variables which can take any direction like flags,

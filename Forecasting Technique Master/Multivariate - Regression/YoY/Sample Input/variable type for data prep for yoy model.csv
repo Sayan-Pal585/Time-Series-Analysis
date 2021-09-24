@@ -1,0 +1,61 @@
+variables,type
+Beer.Consumption.Khl,yoy
+Number.Holidays,as it is
+Good.Friday.Flag,as it is
+Corpus.Christi.Flag,as it is
+Monthly.Price.Index.18,yoy
+Monthly.Price.Index,yoy
+Avg.Max.Temp,yoy
+Avg.Mean.Temp,yoy
+Avg.Min.Temp,yoy
+Avg.Precipitation.mm,yoy
+Population.Total,yoy
+Population.Above.15,yoy
+GDP.Growth.Real.,lag.12.increment
+Nominal.GDP.Billion.USD,yoy
+Nominal.GDP.Per.Capita.USD,yoy
+Annual_CPI,yoy
+Balance.Of.Payment,yoy
+PPP.Share.Of.World,yoy
+Gross.National.Savings.GDP.Pct,transform
+Volume.Imports.GnS.Pct.Change,as it is
+Volume.Exports.GnS.Pct.Change,as it is
+General.Govt.Revenue.Billions.National.Currency,yoy
+General.Govt.Tot.Expenditure.Billions.National.Currency,yoy
+Ratio.Govt.Lending.Borrowing.National.currency,yoy
+Current.Account.Balance.Billions.USD,yoy
+Current.Account.Balance.Pct.GDP,transform
+Int.Tourism.Expenditure.Current.USD,yoy
+Int.Tourism.Departures,yoy
+Int.Tourism.Arrivals,yoy
+Unemployment.Total.Pct,yoy
+Unemployment.Total.Male.Pct,yoy
+Unemployment.Total.Female.Pct,yoy
+Unemployment.15to24.Total.Pct,yoy
+Unemployment.15to24.Total.Male.Pct,yoy
+Unemployment.15to24.Total.Female.Pct,yoy
+Bol.Corruption.Perception.Index,yoy
+Brz.Corruption.Perception.Index,yoy
+Mean.Corruption.Index,yoy
+Bol.Global.Competitiveness.Rank,lag.12.increment
+Brz.Global.Competitiveness.Rank,lag.12.increment
+Rank.Gap,lag.12.increment
+Bol.Global.Competitiveness.Index,yoy
+Brz.Global.Competitiveness.Index,yoy
+Bol.Control.Of.Corruption,yoy
+Bol.CPI.Pct.Change,as it is
+Brz.CPI.Pct.Change,as it is
+Gap.CPI.Pct.Change,transform
+Ratio.CPI.Pct.Change,transform
+mon.1.flag,as it is
+mon.2.flag,as it is
+mon.3.flag,as it is
+mon.4.flag,as it is
+mon.5.flag,as it is
+mon.6.flag,as it is
+mon.7.flag,as it is
+mon.8.flag,as it is
+mon.9.flag,as it is
+mon.10.flag,as it is
+mon.11.flag,as it is
+mon.12.flag,as it is
