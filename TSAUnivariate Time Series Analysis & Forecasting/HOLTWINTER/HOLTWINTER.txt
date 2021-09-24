@@ -1,0 +1,234 @@
+#############################################################################################################
+
+# HOLT-WINTERS MODEL CODE (UNIVARIATE)
+
+############################################# NOTES: #################################################################
+
+## THE BELOW CODE HAS THE FOLLWING MODULES: 
+## A. INSTALLS REQUIRED PACKAGES
+## B. USER MANUAL INPUTS
+## C. IMPORT OF RAW DATA AND REGRESSOR VARIABLE NAMES
+## D. DATA PREPARATION
+## E. ITERATION LOOP FOR MULTIPLE TRAINING PERIODS & BEST MODEL SELECTION
+## F. CHAMPION MODELs RUN. BASED ON - i) BEST AIC VALUE ii) BEST INSAMPLE MAPE iii) BEST OUTSAMPLE MAPE & iv) AUTO ARIMA RESULTS
+## G. VALIDATION / ACCURACY CALCULATION
+## H. YEAR-ON-YEAR MARKET GROWTH ACTUALS VS PREDICTIONS
+## I. FORECAST - USING BEST MODEL ORDERs ON DATA TRAIN TILL 2016/LATEST YEAR WITH ALL AVAILABLE DATA
+## J. FORECAST - USING BEST MODEL ORDERs ON DATA TRAIN TILL 2017-FEB / LATEST AVAILABLE DATA (YTD)
+## K. OUTPUT / SUMMARY OF RESULTS
+
+## RAW DATA SHOULD BE IN THE REQUIRED FORMAT::
+## FLAT FILE SHOULD BE .CSV 
+## COLUMN 1 SHOULD BE MONTH/DATE. FORMAT IN "mm/dd/yyyy"
+## COLUMN 2 SHOULD BE BEER VOLUME/PRODUCTION/Y. FORMAT IN NUMERIC
+
+#######################################################################################################################
+
+##################################### A. Install Packages ########################################################
+if(!require(svDialogs)){install.packages("svDialogs")};library(svDialogs)
+if(!require(tseries)){install.packages("tseries")};library(tseries)
+if(!require(forecast)){install.packages("forecast")};library(forecast)
+if(!require(lubridate)){install.packages("lubridate")};library(lubridate)
+if(!require(fpp)){install.packages("fpp")};library(fpp)
+if(!require(tcltk)){install.packages("tcltk")};library(tcltk)
+
+#################################################################################################################
+
+######################################## B. MANUAL INPUTS ####################################################
+# 1: ENTER COUNTRY NAME:          
+Country<-"Australia"        
+
+# 2: ENTER START YEAR OF YOUR DATA
+start_yr<-2009
+
+# 3: ENTER THE START MONTH
+start_month<-1
+
+# 4: ENTER END YEAR: 
+#NOTE: (It should be the last year with all 12 months of data available)
+end_yr<-2016
+
+# 5: ENTER THE LATEST YEAR (YTD): 
+#NOTE: (Eg. 2017 might have 2-3 months but not all the months)
+Most_recent_yr<-2017
+
+# 6: ENTER THE LATEST MONTH OF THE LATEST YEAR 
+#NOTE:(Eg. Have Data only till Feb of 2017:
+Most_recent_month<-2
+
+# 7: NUMBER OF PERIODS TO FORECAST AHEAD
+#NOTE: (Only to applied for Latest year)
+Forecast_period<-36
+
+#8: Number of years You want to go back in History
+histrory_period <- 3
+######################################## MANUAL INPUT ENDS ########################################################
+
+###################################### C. IMPORT RAW DATA #######################################################
+
+setwd("C:\\Users\\C630972\\Documents\\Holt Winters -Demo\\Output")
+data_Arima<-read.csv(file.choose(),header=T)
+
+data_Arima$Month<-as.Date(data_Arima[,1],"%m/%d/%Y")
+
+############################################ D. DATA PREPARATION ############################################
+
+# Import Data and Format Date/Month, column names of 1 & 2. Note: convert Beer volume class to Numeric (if integer)
+colnames(data_Arima)[1:2]<-c("Month","Beer_Volume")
+data_Arima$year<-year(data_Arima$Month)
+data_Arima$Beer_Volume<-as.numeric(data_Arima[,"Beer_Volume"])
+end_month<-12
+end_yr_train<-as.numeric(end_yr)-1
+start_yr_test<-as.numeric(end_yr_train)+1
+end_yr_test<-as.numeric(end_yr)
+latest_date<-as.Date(paste(end_yr,end_month,1),"%Y%m%d")
+earliest_date<-as.Date(paste(start_yr,start_month,1),"%Y%m%d")
+
+############################## SELECT VARIABLES ###########################
+var_list <- colnames(data_Arima)
+res1 <- dlgList(var_list,multiple=T,title="Select the variable you wish to Forecast")$res
+
+
+if(length(res1)>1){
+  tkmessageBox(title="Attention:",message="You have selected more than 1 variable. Please select only one!!!")
+}else{
+  
+  
+  ## CONVERTING REQUIRED VARIABLE TO TIME SERIES
+  y<-ts(data_Arima[,res1],start = c(start_yr,start_month),end=c(end_yr,end_month),frequency = 12)
+  
+  ############################################ DATA PREPARATION ENDS ##################################################
+  
+  ################################# E. LOOP STARTS FOR VARIOUS TRAINING PERIOD ###########################################
+  
+  best_model_order<-0  #To Fix the ARIMA Orders of the Best combination
+  one_time_loop<-0     #To Fix Best Model Selection Module to Restrict only to 1 Training Year 
+  t<-1                 #For Going back Number of Years 
+  
+  control1<-0
+  for(t in 1:histrory_period){
+    
+    #Creation of training and test dataset for Beer volume
+    data_train<- window(y,start=c(start_yr,start_month),end=c(end_yr_train,12))
+    data_test<- window(y,start=c(start_yr_test,1),end=c(end_yr_test,12))
+    
+    
+    ############################# HW MODEL RUN ##############################
+    
+    final_1<-NULL
+    
+    #Error Handling::
+    tryCatch({
+      final_1 <- hw(y=data_train,h=length(data_test))
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"Model doesn't Fit for Year-",end_yr_train, "\n")})  
+    
+    
+    ###################################### CHAMPION MODEL MODELS FIT ends ###################################################
+    
+    ############################### G. ACCURACY CALCULATION FOR CHAMPION MODELS  ###################################
+    
+    results_f_1<-NULL;accu_1<-NULL;arimax_accu_1<-NULL;fit_accu_1<-NULL;actuals_fitted_1<-NULL;otp_1<-data.frame(NULL);date_fst_1<-NULL;coeff_1<-data.frame(NULL)
+    
+    
+    
+    #####Model 1::
+    #Out sample monthly accuracy
+    tryCatch({
+      results_f_1 <- final_1
+      accu_1<-1-(abs(as.numeric(data_test)-(as.numeric(results_f_1$mean)))/as.numeric(data_test))
+      arimax_accu_1<-data.frame(as.numeric(data_test),as.numeric(results_f_1$mean),accu_1)
+      colnames(arimax_accu_1)<-c("Actual_value","Predicted_value","Accuracy")
+      #In Sample Monthly accuracy
+      fit_accu_1<-1-abs(final_1$residuals/data_train)
+      actuals_fitted_1<-cbind.data.frame(Actual_value=as.numeric(data_train),Predicted_value=as.numeric(fitted(final_1)),
+                                         Accuracy=as.numeric(fit_accu_1))
+      #combine in and out sample accuracies
+      otp_1<-rbind(actuals_fitted_1,arimax_accu_1)
+      date_fst_1=seq.Date(earliest_date,data_Arima[nrow(otp_1),1],by="1 month")
+      otp_1<-cbind.data.frame(Trained_Year=end_yr_train,Based_On=final_1$model$method,Year=year(date_fst_1),Month=date_fst_1,otp_1)
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"Model doen't fit for Training Year-",end_yr_train, "\n")})
+    
+    ########################### Accuracy Calculation of Models ENDs  ###############################
+    
+    ############################# COLLATING ALL CHAMPION MODEL'S RESULTS  ###############################
+    
+    #Combining All Models for All Iterations
+    if(control1==0) {
+      final_otp<-otp_1
+      control1=control1+1
+    }else{
+      final_otp<-rbind(final_otp,otp_1)
+    }
+    
+    #Counter for training years
+    end_yr_train<-end_yr_train-1
+    start_yr_test<-start_yr_test-1
+    
+  }
+  
+  ############################## LOOP STARTS FOR VARIOUS TRAINING PERIOD ENDS #####################
+  
+  ############################ H. AGGREGATING YEAR ON YEAR MARKET GROWTH FOR ALL MODELS ####################
+  
+  ##YOY Marget growth model
+  yoy_results<-aggregate(final_otp[,c("Actual_value","Predicted_value")],final_otp[,c("Based_On","Trained_Year","Year")],FUN = sum)
+  yoy_results<-yoy_results[order(yoy_results$Based_On,yoy_results$Trained_Year),]
+  yoy_results<-cbind.data.frame(yoy_results,Lag_actual=c(NA,yoy_results$Actual_value[1:nrow(yoy_results)-1]))
+  yoy_results$Lag_actual[yoy_results$Year==start_yr]<-NA
+  yoy_results<-cbind.data.frame(yoy_results
+                                ,Accuracy=(1-abs((yoy_results$Predicted_value-yoy_results$Actual_value)/yoy_results$Actual_value)),
+                                PE=((yoy_results$Predicted_value-yoy_results$Actual_value)/yoy_results$Actual_value),
+                                Actual_mkt_growth=(yoy_results$Actual_value-yoy_results$Lag_actual)/yoy_results$Lag_actual,
+                                Predicted_mkt_growth=(yoy_results$Predicted_value-yoy_results$Lag_actual)/yoy_results$Lag_actual)
+  remove_var<-which(colnames(yoy_results)=="Lag_actual")
+  yoy_results<-yoy_results[,-remove_var]
+  
+  ############################ AGGREGATING YEAR ON YEAR MARKET GROWTH FOR ALL MODELS ####################
+  
+  ######################## I. FORECAST FOR LATEST YEAR (Using last year will all available data) #######################################
+  ##Model 1:
+  data_train_m1<- window(y,start=c(start_yr,start_month),end=c(end_yr,end_month))
+  fit_final_m1<- hw(data_train_m1,h=Forecast_period)
+  r_f_m1<-fit_final_m1 
+  fitted_values_m1<-as.numeric(r_f_m1$mean)
+  fst_date_1<-seq.Date(as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(1),as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(length(fitted_values_m1)),by="1 month")
+  forecast_m1<-cbind.data.frame(Based_On=final_1$model$method,Month=fst_date_1,Fitted=fitted_values_m1)
+  
+  #Collate forecast
+  Forecast_Recent<-forecast_m1
+  
+  #################################### FORECAST FOR LATEST YEAR ends #######################################
+  
+  ################################### J. FORECAST FOR LATEST YEAR (Till last last available data) ###################################
+  
+  if(year(data_Arima[sum(!is.na(data_Arima[,res1])),'Month'])==Most_recent_yr){
+    
+    yr_dt <- data_Arima[sum(!is.na(data_Arima[,res1])),'Month']
+    ts_most_recent<-ts(data_Arima[,res1],start = c(start_yr,1),end=c(year(yr_dt),month(yr_dt)),frequency = 12)
+    data_train_most_recent<- window(ts_most_recent,start=c(start_yr,1),end=c(year(yr_dt),month(yr_dt)))
+    
+    #Model 1:
+    fit_final_most_recent_m1 <- hw(data_train_most_recent,h=Forecast_period)
+    r_f_most_recent_m1<-fit_final_most_recent_m1
+    fitted_values_most_recent_m1<-as.numeric(r_f_most_recent_m1$mean)
+    fst_date_most_recent<-seq.Date(as.Date(paste(Most_recent_yr,Most_recent_month,1),format = "%Y%m%d")+months(1),as.Date(paste(Most_recent_yr,Most_recent_month,1),format = "%Y%m%d")+months(length(fitted_values_most_recent_m1)),by="1 month")
+    forecast_most_recent_m1<-cbind.data.frame(Based_On=final_1$model$method,Month=fst_date_most_recent,Fitted=fitted_values_most_recent_m1)
+    #Collate forecast
+    Forecast_Most_Recent <- forecast_most_recent_m1
+  }
+  ################################### Forecast with 2017 ends ###############################
+  
+  
+  ##################################### K. OUTPUT/SUMMARY ########################################################
+  tryCatch({
+    write.csv(final_otp, 'Holt-Winters_Final_Output_Table.csv')  
+    write.csv(Forecast_Recent, 'Holt-Winters_Future_Predictions.csv')
+    write.csv(Forecast_Most_Recent, 'Holt-Winters_Future_Predictions_Most_Recent.csv')
+    write.csv(yoy_results, 'Holt-Winters_YOY_Results.csv')
+  },error=function(e){cat("ERROR :",conditionMessage(e),"Finished Writing", "\n")})
+}
+
+################################### Output ends #####################################
+

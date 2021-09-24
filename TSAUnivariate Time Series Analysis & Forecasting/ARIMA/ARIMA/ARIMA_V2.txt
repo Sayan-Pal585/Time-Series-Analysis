@@ -1,0 +1,465 @@
+#############################################################################################################
+
+# ARIMA MODEL CODE (UNIVARIATE)
+
+############################################# NOTES: #################################################################
+
+## THE BELOW CODE HAS THE FOLLWING MODULES: 
+## A. INSTALLS REQUIRED PACKAGES
+## B. USER MANUAL INPUTS
+## C. IMPORT OF RAW DATA AND REGRESSOR VARIABLE NAMES
+## D. DATA PREPARATION
+## E. ITERATION LOOP FOR MULTIPLE TRAINING PERIODS & BEST MODEL SELECTION
+## F. CHAMPION MODELs RUN. BASED ON - i) BEST AIC VALUE ii) BEST INSAMPLE MAPE iii) BEST OUTSAMPLE MAPE & iv) AUTO ARIMA RESULTS
+## G. VALIDATION / ACCURACY CALCULATION
+## H. YEAR-ON-YEAR MARKET GROWTH ACTUALS VS PREDICTIONS
+## I. FORECAST - USING BEST MODEL ORDERs ON DATA TRAIN TILL 2016/LATEST YEAR WITH ALL AVAILABLE DATA
+## J. FORECAST - USING BEST MODEL ORDERs ON DATA TRAIN TILL 2017-FEB / LATEST AVAILABLE DATA (YTD)
+## K. OUTPUT / SUMMARY OF RESULTS
+
+## RAW DATA SHOULD BE IN THE REQUIRED FORMAT::
+## FLAT FILE SHOULD BE .CSV 
+## COLUMN 1 SHOULD BE MONTH/DATE. FORMAT IN "mm/dd/yyyy"
+## COLUMN 2 SHOULD BE BEER VOLUME/PRODUCTION/Y. FORMAT IN NUMERIC
+
+## IF ANY OF THE MODELS OR ITERATIONS DOESN'T FIT. THE MODEL WILL HANDLE THE ERROR BY SKIPPING
+## THE SAME. THE MESSAGES OF ERRORS AND WARNINGS FOR THE SAME CAN BE SEEN IN THE CONSOLE ALONG WITH
+## THE INFORMATION OF WHERE THE ERROR OCCURED
+
+#######################################################################################################################
+
+##################################### A. Install Packages ########################################################
+if(!require(svDialogs)){install.packages("svDialogs")};library(svDialogs)
+if(!require(tseries)){install.packages("tseries")};library(tseries)
+if(!require(forecast)){install.packages("forecast")};library(forecast)
+if(!require(lubridate)){install.packages("lubridate")};library(lubridate)
+if(!require(fmsb)){install.packages("fmsb")};library(fmsb)
+if(!require(fpp)){install.packages("fpp")};library(fpp)
+if(!require(sqldf)){install.packages("sqldf")};library(sqldf)
+if(!require(lmtest)){install.packages("lmtest")};library(lmtest)
+if(!require(plyr)){install.packages("plyr")};library(plyr)
+if(!require(ggplot2)){install.packages("ggplot2")};library(ggplot2)
+if(!require(reshape)){install.packages("reshape")};library(reshape)
+if(!require(stargazer)){install.packages("stargazer")};library(stargazer)
+if(!require(rmarkdown)){install.packages("rmarkdown")};library(rmarkdown)
+if(!require(knitr)){install.packages("knitr")};library(knitr)
+if(!require(tcltk)){install.packages("tcltk")};library(tcltk)
+
+#################################################################################################################
+
+######################################## B. MANUAL INPUTS ####################################################
+# 1: ENTER COUNTRY NAME:          
+Country<-"Australia"        
+
+# 2: ENTER START YEAR OF YOUR DATA
+start_yr<-2009
+
+# 3: ENTER THE START MONTH
+start_month<-1
+
+# 4: ENTER END YEAR: 
+#NOTE: (It should be the last year with all 12 months of data available)
+end_yr<-2016
+
+# 5: ENTER THE LATEST YEAR (YTD): 
+#NOTE: (Eg. 2017 might have 2-3 months but not all the months)
+Most_recent_yr<-2017
+
+# 6: ENTER THE LATEST MONTH OF THE LATEST YEAR 
+#NOTE:(Eg. Have Data only till Feb of 2017:
+Most_recent_month<-2
+
+# 7: NUMBER OF PERIODS TO FORECAST AHEAD
+#NOTE: (Only to applied for Latest year)
+Forecast_period<-36
+
+######################################## MANUAL INPUT ENDS ########################################################
+
+###################################### C. IMPORT RAW DATA #######################################################
+
+setwd("C:\\Users\\C630972\\Documents\\Arima_Demo\\Output")
+data_Arima<-read.csv(file.choose(),header=T)
+#data_Arima <- read.csv("O:\\Dipankar\\Colombia\\Model Run\\Log-Log\\Final_data_set.csv")
+
+data_Arima$Month<-as.Date(data_Arima[,1],"%m/%d/%Y")
+
+############################################ D. DATA PREPARATION ############################################
+
+# Import Data and Format Date/Month, column names of 1 & 2. Note: convert Beer volume class to Numeric (if integer)
+colnames(data_Arima)[1:2]<-c("Month","Beer_Volume")
+data_Arima$year<-year(data_Arima$Month)
+data_Arima$Beer_Volume<-as.numeric(data_Arima[,"Beer_Volume"])
+end_month<-12
+end_yr_train<-as.numeric(end_yr)-1
+start_yr_test<-as.numeric(end_yr_train)+1
+end_yr_test<-as.numeric(end_yr)
+latest_date<-as.Date(paste(end_yr,end_month,1),"%Y%m%d")
+earliest_date<-as.Date(paste(start_yr,start_month,1),"%Y%m%d")
+
+############################## SELECT VARIABLES ###########################
+var_list <- colnames(data_Arima)
+res1 <- dlgList(var_list,multiple=T,title="Select the variable you wish to Forecast")$res
+
+
+if(length(res1)>1){
+  tkmessageBox(title="Attention:",message="You have selected more than 1 variable. Please select only one!!!")
+}else{
+  
+  
+  ## CONVERTING REQUIRED VARIABLE TO TIME SERIES
+  y<-ts(data_Arima[,res1],start = c(start_yr,start_month),end=c(end_yr,end_month),frequency = 12)
+  
+  ############################################ DATA PREPARATION ENDS ##################################################
+  
+  ################################# E. LOOP STARTS FOR VARIOUS TRAINING PERIOD ###########################################
+  
+  best_model_order<-0  #To Fix the ARIMA Orders of the Best combination
+  one_time_loop<-0     #To Fix Best Model Selection Module to Restrict only to 1 Training Year 
+  t<-1                 #For Going back Number of Years 
+  
+  control1<-0
+  for(t in 1:3){
+    
+    #Creation of training and test dataset for Beer volume
+    data_train<- window(y,start=c(start_yr,start_month),end=c(end_yr_train,12))
+    data_test<- window(y,start=c(start_yr_test,1),end=c(end_yr_test,12))
+    
+    ###################### LOOP FOR BEST MODEL SELECTION STARTS #################################
+    
+    if(one_time_loop==0){
+      auto_arima_fit<-auto.arima(data_train)
+      auto_arima_fst<-forecast(auto_arima_fit,h = length(data_test))$mean
+      auto_arima_mape_out<-accuracy(auto_arima_fst,data_test)[5]
+      auto_arima_mape_in<-sum(abs(auto_arima_fit$residuals)/data_train)/length(data_train)*100
+      auto_arima_orders<-arimaorder(auto_arima_fit)
+      auto_arima_annual_error<-abs((sum(data_test)-sum(auto_arima_fst))/sum(data_test))*100
+      auto_out<-rbind(list=c(ifelse(anyNA(arimaorder(auto_arima_fit)[1])==TRUE,0,arimaorder(auto_arima_fit)[1]),
+                             ifelse(anyNA(arimaorder(auto_arima_fit)[2])==TRUE,0,arimaorder(auto_arima_fit)[2]),
+                             ifelse(anyNA(arimaorder(auto_arima_fit)[3])==TRUE,0,arimaorder(auto_arima_fit)[3]),
+                             ifelse(anyNA(arimaorder(auto_arima_fit)[4])==TRUE,0,arimaorder(auto_arima_fit)[4]),
+                             ifelse(anyNA(arimaorder(auto_arima_fit)[5])==TRUE,0,arimaorder(auto_arima_fit)[5]),
+                             ifelse(anyNA(arimaorder(auto_arima_fit)[6])==TRUE,0,arimaorder(auto_arima_fit)[6]),
+                             ifelse(anyNA(arimaorder(auto_arima_fit)[7])==TRUE,12,arimaorder(auto_arima_fit)[7]),
+                             auto_arima_mape_out,auto_arima_annual_error,auto_arima_fit$aic,auto_arima_mape_in,1))
+      colnames(auto_out)<-c("p","d","q","P","D","Q","Period","Outsample MAPE","Annual_Error","AIC","Insample MAPE","Serial_No")
+      
+      
+      #Loop to calculate the various orders for ARIMA(fORECED ORDERS)
+      
+      j=0
+      p <- 0
+      dif <- 0
+      q <- 0
+      P <- 0
+      Q <- 0
+      Serial_No=2  
+      
+      for (p in 0:2){
+        for(q in 0:2){
+          for (P in 0:1){
+            for (Q in 0:1){
+              for(dif in 0:1){
+                
+                tryCatch({
+                  
+                  fit<-arima(data_train,order=c(p,dif,q),seasonal = list(order=c(P,1,Q),period=12))
+                  d <- sum(abs(fit$residuals)/(data_train))
+                  MAPE_In <- (100 * d)/length(data_train)
+                  
+                  pred<-forecast(fit,h=length(data_test))
+                  accu<-accuracy(ts((pred$mean)),ts(data_test))
+                  annual_error<- 100*abs((sum(data_test)-sum(pred$mean))/sum(data_test))
+                  
+                  out<-rbind(list=c(arimaorder(fit),accu[5],annual_error,fit$aic,MAPE_In,Serial_No))
+                  
+                  Serial_No=Serial_No+1
+                  
+                  if(j==0)
+                  {
+                    arima_output<-data.frame(out)
+                    j=j+1
+                  }
+                  else
+                  {
+                    arima_output<-rbind(arima_output,data.frame(out))
+                    
+                  }},error=function(e){cat("ERROR :",conditionMessage(e),"During Best Model selection Loop", "\n")})
+              }
+            }
+          }
+        }
+      }
+      
+      #arima_output<-NULL
+      
+      colnames(arima_output)<-c("p","d","q","P","D","Q","Period","Outsample MAPE","Annual_Error","AIC","Insample MAPE","Serial_No")
+      
+      
+      #Combining the auto arima result with the results of looped arima
+      arima_output<-rbind(arima_output,auto_out)
+      one_time_loop=one_time_loop+1
+    }
+    
+    
+    
+    ############################### Choosing the best Model (ORDERING) ###########################
+    
+    if(best_model_order==0){
+      #Order model outputs by lowest AIC value
+      result_1<-arima_output[order(arima_output[,"AIC"]),]
+      #Order model outputs by lowest out sample MAPE
+      result_2<-arima_output[order(arima_output[,"Outsample MAPE"]),]
+      #Order model outputs by lowest in sample MAPE
+      result_3<-arima_output[order(arima_output[,"Insample MAPE"]),]
+      #Order Model Outputs by Auto ARIMA result
+      result_4<-arima_output[order(arima_output[,"Serial_No"]),]
+      best_model_order=best_model_order+1
+    }
+    
+    ################################## BEST MODEL SELECTION LOOP ENDS ##################################### ############## 
+    
+    ############################# F. CHAMPION MODELS FIT STARTS (For various Training Years) ##################################
+    
+    final_1<-NULL;final_2<-NULL;final_3<-NULL;final_4<-NULL
+    
+    #Select champion model and fit the model(Taking values for lowest out sample MAPE from table) :
+    #Model 1
+    #Error Handling::
+    tryCatch({
+      final_1<-arima(data_train,order=c(result_1[1,1],result_1[1,2],result_1[1,3]),
+                     seasonal = list(order=c(result_1[1,4],1,result_1[1,6]),period=12))
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model fitting.Based on Lowest AIC. During Training year-",end_yr_train, "\n")})  
+    
+    #Model 2
+    tryCatch({
+      final_2<-arima(data_train,order=c(result_2[1,1],result_2[1,2],result_2[1,3]),
+                     seasonal = list(order=c(result_2[1,4],1,result_2[1,6]),period=12))
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model fitting.Based on Lowest OutSample MAPE. During Training year-",end_yr_train, "\n")})  
+    
+    #Model 3
+    tryCatch({
+      final_3<-arima(data_train,order=c(result_3[1,1],result_3[1,2],result_3[1,3]),
+                     seasonal = list(order=c(result_3[1,4],1,result_3[1,6]),period=12))
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model fitting.Based on Lowest InSample MAPE. During Training year-",end_yr_train, "\n")})
+    
+    #Model 4
+    tryCatch({
+      final_4<-arima(data_train,order=c(result_4[1,1],result_4[1,2],result_4[1,3]),
+                     seasonal = list(order=c(result_4[1,4],1,result_4[1,6]),period=12))
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model fitting.Based on AUTO ARIMA. During Training year-",end_yr_train, "\n")})
+    
+    ###################################### CHAMPION MODEL MODELS FIT ends ###################################################
+    
+    ############################### G. ACCURACY CALCULATION FOR CHAMPION MODELS  ###################################
+    
+    results_f_1<-NULL;accu_1<-NULL;arimax_accu_1<-NULL;fit_accu_1<-NULL;actuals_fitted_1<-NULL;otp_1<-data.frame(NULL);date_fst_1<-NULL;coeff_1<-data.frame(NULL)
+    results_f_2<-NULL;accu_2<-NULL;arimax_accu_2<-NULL;fit_accu_2<-NULL;actuals_fitted_2<-NULL;otp_2<-data.frame(NULL);date_fst_2<-NULL;coeff_2<-data.frame(NULL)
+    results_f_3<-NULL;accu_3<-NULL;arimax_accu_3<-NULL;fit_accu_3<-NULL;actuals_fitted_3<-NULL;otp_3<-data.frame(NULL);date_fst_3<-NULL;coeff_3<-data.frame(NULL)
+    results_f_4<-NULL;accu_4<-NULL;arimax_accu_4<-NULL;fit_accu_4<-NULL;actuals_fitted_4<-NULL;otp_4<-data.frame(NULL);date_fst_4<-NULL;coeff_4<-data.frame(NULL)
+    
+    #####Model 1::Begins Based on Lowest AIC value
+    #Out sample monthly accuracy
+    tryCatch({
+      results_f_1<-forecast(final_1,h=length(data_test))
+      accu_1<-1-(abs(as.numeric(data_test)-(as.numeric(results_f_1$mean)))/as.numeric(data_test))
+      arimax_accu_1<-data.frame(as.numeric(data_test),as.numeric(results_f_1$mean),accu_1)
+      colnames(arimax_accu_1)<-c("Actual_value","Predicted_value","Accuracy")
+      #In Sample Monthly accuracy
+      fit_accu_1<-1-abs(final_1$residuals/data_train)
+      actuals_fitted_1<-cbind.data.frame(Actual_value=as.numeric(data_train),Predicted_value=as.numeric(fitted(final_1)),
+                                         Accuracy=as.numeric(fit_accu_1))
+      #combine in and out sample accuracies
+      otp_1<-rbind(actuals_fitted_1,arimax_accu_1)
+      date_fst_1=seq.Date(earliest_date,data_Arima[nrow(otp_1),1],by="1 month")
+      otp_1<-cbind.data.frame(Trained_Year=end_yr_train,Based_On="Lowest AIC",Year=year(date_fst_1),Month=date_fst_1,otp_1)
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model-Accuracy calculation.LOwest AIC value.Training Year-",end_yr_train, "\n")})
+    
+    #####Model 2::Begins Based on Lowest Outsample MAPE
+    #Out sample monthly accuracy
+    tryCatch({
+      results_f_2<-forecast(final_2,h=length(data_test))
+      accu_2<-1-(abs(as.numeric(data_test)-(as.numeric(results_f_2$mean)))/as.numeric(data_test))
+      arimax_accu_2<-data.frame(as.numeric(data_test),as.numeric(results_f_2$mean),accu_2)
+      colnames(arimax_accu_2)<-c("Actual_value","Predicted_value","Accuracy")
+      #In Sample Monthly accuracy
+      fit_accu_2<-1-abs(final_2$residuals/data_train)
+      actuals_fitted_2<-cbind.data.frame(Actual_value=as.numeric(data_train),Predicted_value=as.numeric(fitted(final_2)),
+                                         Accuracy=as.numeric(fit_accu_2))
+      #combine in and out sample accuracies
+      otp_2<-rbind(actuals_fitted_2,arimax_accu_2)
+      date_fst_2=seq.Date(earliest_date,data_Arima[nrow(otp_2),1],by="1 month")
+      otp_2<-cbind.data.frame(Trained_Year=end_yr_train,Based_On="Lowest OutSample Mape",Year=year(date_fst_2),Month=date_fst_2,otp_2)
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model-Accuracy calculation.LOwest OutSample MAPE.Training Year-",end_yr_train, "\n")})
+    
+    #####Model 3::Begins Based on Lowest InSample MAPE
+    #Out sample monthly accuracy
+    tryCatch({
+      results_f_3<-forecast(final_3,h=length(data_test))
+      accu_3<-1-(abs(as.numeric(data_test)-(as.numeric(results_f_3$mean)))/as.numeric(data_test))
+      arimax_accu_3<-data.frame(as.numeric(data_test),as.numeric(results_f_3$mean),accu_3)
+      colnames(arimax_accu_3)<-c("Actual_value","Predicted_value","Accuracy")
+      #In Sample Monthly accuracy
+      fit_accu_3<-1-abs(final_3$residuals/data_train)
+      actuals_fitted_3<-cbind.data.frame(Actual_value=as.numeric(data_train),Predicted_value=as.numeric(fitted(final_3)),
+                                         Accuracy=as.numeric(fit_accu_3))
+      #combine in and out sample accuracies
+      otp_3<-rbind(actuals_fitted_3,arimax_accu_3)
+      date_fst_3=seq.Date(earliest_date,data_Arima[nrow(otp_3),1],by="1 month")
+      otp_3<-cbind.data.frame(Trained_Year=end_yr_train,Based_On="Lowest INSample Mape",Year=year(date_fst_3),Month=date_fst_3,otp_3)
+      
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model-Accuracy calculation.LOwest INSample MAPE.Training Year-",end_yr_train, "\n")})  
+    
+    #####Model 4::Begins Based on Auto ARIMA
+    #Out sample monthly accuracy
+    tryCatch({
+      results_f_4<-forecast(final_4,h=length(data_test))
+      accu_4<-1-(abs(as.numeric(data_test)-(as.numeric(results_f_4$mean)))/as.numeric(data_test))
+      arimax_accu_4<-data.frame(as.numeric(data_test),as.numeric(results_f_4$mean),accu_4)
+      colnames(arimax_accu_4)<-c("Actual_value","Predicted_value","Accuracy")
+      #In Sample Monthly accuracy
+      fit_accu_4<-1-abs(final_4$residuals/data_train)
+      actuals_fitted_4<-cbind.data.frame(Actual_value=as.numeric(data_train),Predicted_value=as.numeric(fitted(final_4)),
+                                         Accuracy=as.numeric(fit_accu_4))
+      #combine in and out sample accuracies
+      otp_4<-rbind(actuals_fitted_4,arimax_accu_4)
+      date_fst_4=seq.Date(earliest_date,data_Arima[nrow(otp_4),1],by="1 month")
+      otp_4<-cbind.data.frame(Trained_Year=end_yr_train,Based_On="Auto Arima",Year=year(date_fst_4),Month=date_fst_4,otp_4)
+    },error=function(e){cat("ERROR :",conditionMessage(e),"At Champion Model-Accuracy calculation.LOwest OutSample MAPE.Training Year-",end_yr_train, "\n")})  
+    
+    ########################### Accuracy Calculation of Models ENDs  ###############################
+    
+    
+    ############################# COLLATING ALL CHAMPION MODEL'S RESULTS  ###############################
+    
+    #Combining All Models for All Iterations
+    if(control1==0) {
+      final_otp<-rbind(otp_1,otp_2,otp_3,otp_4)
+      control1=control1+1
+    }else{
+      final_otp<-rbind(final_otp,otp_1,otp_2,otp_3,otp_4)
+    }
+    
+    #Counter for training years
+    end_yr_train<-end_yr_train-1
+    start_yr_test<-start_yr_test-1
+    
+  }
+  
+  ############################## LOOP STARTS FOR VARIOUS TRAINING PERIOD ENDS #####################
+  
+  ############################ H. AGGREGATING YEAR ON YEAR MARKET GROWTH FOR ALL MODELS ####################
+  
+  ##YOY Marget growth model
+  yoy_results<-aggregate(final_otp[,c("Actual_value","Predicted_value")],final_otp[,c("Based_On","Trained_Year","Year")],FUN = sum)
+  yoy_results<-yoy_results[order(yoy_results$Based_On,yoy_results$Trained_Year),]
+  yoy_results<-cbind.data.frame(yoy_results,Lag_actual=c(NA,yoy_results$Actual_value[1:nrow(yoy_results)-1]))
+  yoy_results$Lag_actual[yoy_results$Year==start_yr]<-NA
+  yoy_results<-cbind.data.frame(yoy_results
+                                ,Accuracy=(1-abs((yoy_results$Predicted_value-yoy_results$Actual_value)/yoy_results$Actual_value)),
+                                PE=((yoy_results$Predicted_value-yoy_results$Actual_value)/yoy_results$Actual_value),
+                                Actual_mkt_growth=(yoy_results$Actual_value-yoy_results$Lag_actual)/yoy_results$Lag_actual,
+                                Predicted_mkt_growth=(yoy_results$Predicted_value-yoy_results$Lag_actual)/yoy_results$Lag_actual)
+  remove_var<-which(colnames(yoy_results)=="Lag_actual")
+  yoy_results<-yoy_results[,-remove_var]
+  
+  ############################ AGGREGATING YEAR ON YEAR MARKET GROWTH FOR ALL MODELS ####################
+  
+  ######################## I. FORECAST FOR LATEST YEAR (Using last year will all available data) #######################################
+  ##Model 1:
+  data_train_m1<- window(y,start=c(start_yr,start_month),end=c(end_yr,end_month))
+  
+  fit_final_m1<-arima(data_train_m1,order=c(result_1[1,1],result_1[1,2],result_1[1,3]),
+                      seasonal = list(order=c(result_1[1,4],1,result_1[1,6]),period=12))
+  r_f_m1<-forecast(fit_final_m1,h=Forecast_period) #Need to change if forecast for longer period
+  fitted_values_m1<-as.numeric(r_f_m1$mean)
+  fst_date_1<-seq.Date(as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(1),as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(length(fitted_values_m1)),by="1 month")
+  forecast_m1<-cbind.data.frame(Based_On="Lowest AIC",Month=fst_date_1,Fitted=fitted_values_m1)
+  
+  ##Model 2:
+  fit_final_m2<-arima(data_train_m1,order=c(result_2[1,1],result_2[1,2],result_2[1,3]),
+                      seasonal = list(order=c(result_2[1,4],1,result_2[1,6]),period=12))
+  r_f_m2<-forecast(fit_final_m2,h=Forecast_period)
+  fitted_values_m2<-as.numeric(r_f_m2$mean)
+  #fst_date_1<-seq.Date(as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(1),as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(nrow(fitted_values_m1)),by="1 month")
+  forecast_m2<-cbind.data.frame(Based_On="Lowest OutSample Mape",Month=fst_date_1,Fitted=fitted_values_m2)
+  
+  ##Model 3: 
+  fit_final_m3<-arima(data_train_m1,order=c(result_3[1,1],result_3[1,2],result_3[1,3]),
+                      seasonal = list(order=c(result_3[1,4],1,result_3[1,6]),period=12))
+  r_f_m3<-forecast(fit_final_m3,h=Forecast_period)
+  fitted_values_m3<-as.numeric(r_f_m3$mean)
+  #fst_date_1<-seq.Date(as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(1),as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(nrow(fitted_values_m1)),by="1 month")
+  forecast_m3<-cbind.data.frame(Based_On="Lowest INSample Mape",Month=fst_date_1,Fitted=fitted_values_m3)
+  
+  #Model 4:
+  fit_final_m4<-arima(data_train_m1,order=c(result_4[1,1],result_4[1,2],result_4[1,3]),
+                      seasonal = list(order=c(result_4[1,4],1,result_4[1,6]),period=12))
+  r_f_m4<-forecast(fit_final_m4,h=Forecast_period)
+  fitted_values_m4<-as.numeric(r_f_m4$mean)
+  #fst_date_1<-seq.Date(as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(1),as.Date(paste(end_yr,end_month,1),format = "%Y%m%d")+months(nrow(fitted_values_m1)),by="1 month")
+  forecast_m4<-cbind.data.frame(Based_On="Auto Arima",Month=fst_date_1,Fitted=fitted_values_m4)
+  
+  #Collate forecast
+  Forecast_Recent<-rbind.data.frame(forecast_m1,forecast_m2,forecast_m3,forecast_m4)
+  
+  #################################### FORECAST FOR LATEST YEAR ends #######################################
+  
+  ################################### J. FORECAST FOR LATEST YEAR (Till last last available data) ###################################
+  
+  if(year(data_Arima[sum(!is.na(data_Arima[,res1])),'Month'])==Most_recent_yr){
+    
+    yr_dt <- data_Arima[sum(!is.na(data_Arima[,res1])),'Month']
+    ts_most_recent<-ts(data_Arima[,res1],start = c(start_yr,1),end=c(year(yr_dt),month(yr_dt)),frequency = 12)
+    data_train_most_recent<- window(ts_most_recent,start=c(start_yr,1),end=c(year(yr_dt),month(yr_dt)))
+    
+    #Model 1:
+    fit_final_most_recent_m1<-arima(data_train_most_recent,order=c(result_1[1,1],result_1[1,2],result_1[1,3]),
+                                    seasonal = list(order=c(result_1[1,4],1,result_1[1,6]),period=12))
+    r_f_most_recent_m1<-forecast(fit_final_most_recent_m1,h=Forecast_period-Most_recent_month)
+    fitted_values_most_recent_m1<-as.numeric(r_f_most_recent_m1$mean)
+    fst_date_most_recent<-seq.Date(as.Date(paste(Most_recent_yr,Most_recent_month,1),format = "%Y%m%d")+months(1),as.Date(paste(Most_recent_yr,Most_recent_month,1),format = "%Y%m%d")+months(length(fitted_values_most_recent_m1)),by="1 month")
+    forecast_most_recent_m1<-cbind.data.frame(Based_On="Lowest AIC",Month=fst_date_most_recent,Fitted=fitted_values_most_recent_m1)
+    
+    #Model 2:
+    fit_final_most_recent_m2<-arima(data_train_most_recent,order=c(result_2[1,1],result_2[1,2],result_2[1,3]),
+                                    seasonal = list(order=c(result_2[1,4],1,result_2[1,6]),period=12))
+    r_f_most_recent_m2<-forecast(fit_final_most_recent_m2,h=Forecast_period-Most_recent_month)
+    fitted_values_most_recent_m2<-as.numeric(r_f_most_recent_m2$mean)
+    forecast_most_recent_m2<-cbind.data.frame(Based_On="Lowest OutSample Mape",Month=fst_date_most_recent,Fitted=fitted_values_most_recent_m2)
+    
+    #Model 3:
+    fit_final_most_recent_m3<-arima(data_train_most_recent,order=c(result_3[1,1],result_3[1,2],result_3[1,3]),
+                                    seasonal = list(order=c(result_3[1,4],1,result_3[1,6]),period=12))
+    r_f_most_recent_m3<-forecast(fit_final_most_recent_m3,h=Forecast_period-Most_recent_month)
+    fitted_values_most_recent_m3<-as.numeric(r_f_most_recent_m3$mean)
+    forecast_most_recent_m3<-cbind.data.frame(Based_On="Lowest INSample Mape",Month=fst_date_most_recent,Fitted=fitted_values_most_recent_m3)
+    
+    #Model 4:
+    fit_final_most_recent_m4<-arima(data_train_most_recent,order=c(result_4[1,1],result_4[1,2],result_4[1,3]),
+                                    seasonal = list(order=c(result_4[1,4],1,result_4[1,6]),period=12))
+    r_f_most_recent_m4<-forecast(fit_final_most_recent_m4,h=Forecast_period-Most_recent_month)
+    fitted_values_most_recent_m4<-as.numeric(r_f_most_recent_m4$mean)
+    forecast_most_recent_m4<-cbind.data.frame(Based_On="Auto Arima",Month=fst_date_most_recent,Fitted=fitted_values_most_recent_m4)
+    
+    #Collate forecast
+    Forecast_Most_Recent<-rbind.data.frame(forecast_most_recent_m1,forecast_most_recent_m2,forecast_most_recent_m3,forecast_most_recent_m4)
+  }
+  ################################### Forecast with 2017 ends ###############################
+  
+  today<-Sys.Date()
+  
+  ##################################### K. OUTPUT/SUMMARY ########################################################
+  tryCatch({
+    write.csv(arima_output, 'Arima_PDQ_Order_Table.csv')
+    write.csv(final_otp, 'Arima_Final_Output_Table.csv')  
+    write.csv(Forecast_Recent, 'ARIMA_Future_Predictions.csv')
+    write.csv(Forecast_Most_Recent, 'ARIMA_Future_Predictions_Most_Recent.csv')
+    write.csv(yoy_results, 'ARIMA_YOY_Results.csv')
+  },error=function(e){cat("ERROR :",conditionMessage(e),"Finished Writing", "\n")})
+}
+################################### Output ends #####################################

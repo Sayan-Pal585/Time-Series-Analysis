@@ -1,0 +1,527 @@
+# Clearing up the workspace
+rm(list = ls())
+
+
+# Set working directory 
+working_dir <- "/Users/aliqureshi/Desktop/TheMathCompany/KM/ARIMA_Module/Input"
+setwd(working_dir)
+data <- read.csv("/Users/aliqureshi/Desktop/TheMathCompany/KM/ARIMA_Module/Input/data.csv")
+#Set the directory for the outputs
+out_path<-"/Users/aliqureshi/Desktop/TheMathCompany/KM/ARIMA_Module/Output"
+
+## Function to install all required packages at one shot
+load.function <- function(){
+  Sys.setenv(TZ='GMT')
+  ## List all packages##
+  packagelist <- c("lubridate","plyr","dplyr","forecast","reshape","reshape2","scales","rucm","zoo",
+                   "stringi","e1071","tseries", "tsoutliers", "ArgumentCheck", "forecastHybrid", "car", "fmsb", 
+                   "MASS", "QuantPsyc", "tibble", "opera", "aTSA", "plotly", "Hmisc", "dplyr", "knitr", "tm", "svDialogs", "tcltk2")
+  
+  ## ---------- List all packages that need to be installed and will install them ---------- ##
+  newpackages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
+  if(length(newpackages)) install.packages(newpackages, dependencies = T, repos = "http://cran.us.r-project.org")
+  
+  if ("forecastxgb" %in% installed.packages()[,"Package"] == F) {
+    if ("devtools" %in% installed.packages()[,"Package"] == F)
+      install.packages("devtools")
+    
+    library(devtools)
+    devtools::install_github("ellisp/forecastxgb-r-package/pkg")
+  }
+  
+  packagelist <- c(packagelist, "forecastxgb")
+  
+  ## ---------- List checklist of loaded packages ---------- ##
+  check.lib <- data.frame(lapply(packagelist, require, character.only = T))
+  colnames(check.lib) <- packagelist
+  return(check.lib)
+}
+
+load.function()
+
+
+
+# Read dataset
+data<-read.csv("data.csv", stringsAsFactors = FALSE, header = TRUE)
+
+#Converting data into the correct format
+str(data)
+data$DATE_SK <- dmy(as.character(data$DATE_SK))
+data <- data %>% arrange(DATE_SK)
+data$volume <- data$VOLUME..KHL.
+data$month <- data$DATE_SK
+View(data)
+
+#Converting data to a time-series
+volume_ts<-ts(data[,8],start = c(2015,1),end=c(2017,9),frequency = 12)
+
+tt <- ts(data[,8], start=c(1981,1), frequency = 12)
+#Decomposing to look at the seasonal, trend and irregular components
+
+Decomposing_the_timeseries <- function(volume_ts){
+  decomp <- stl(volume_ts, s.window = "periodic")
+  pdf(paste(out_path,"decompostion.pdf",sep="/"))
+  plot(decomp)
+  dev.off()
+}
+Decomposing_the_timeseries(volume_ts)
+
+
+# Function for stationarity check 
+
+Stionary_check <- function(volume_ts){
+# The Augmented Dickey–Fuller (ADF) t-statistic test: small p-values suggest the data is stationary and doesn’t need to be differenced stationarity
+tseries::adf.test(volume_ts,alternative = "stationary")
+# The Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test; here accepting the null hypothesis means that the series is stationarity, and small p-values suggest that the series is not stationary and a differencing is required
+# tseries::kpss.test(volume_ts)
+# The Ljung-Box test examines whether there is significant evidence for non-zero correlations at lags 1-20. Small p-values (i.e., less than 0.05) suggest that the series is stationary.
+# Box.test(volume_ts,type="Ljung-Box")
+}
+Stionary_check(volume_ts)
+
+# Function for differencing or log
+install.packages("tcltk2")
+library(tcltk2)
+
+Number_of_differences <- differencing_input()
+
+differencing_input <- function(){
+  
+  xvar <- tclVar("")
+  
+  tt <- tktoplevel()
+  tkwm.title(tt,"Input Numbers")
+  x.entry <- tkentry(tt, textvariable=xvar)
+  
+  reset <- function()
+  {
+    tclvalue(xvar)<-""
+  }
+  
+  reset.but <- tkbutton(tt, text="Reset", command=reset)
+  
+  submit <- function() {
+    x <- as.numeric(tclvalue(xvar))
+    e <- parent.env(environment())
+    e$x <- x
+    tkdestroy(tt)
+  }
+  submit.but <- tkbutton(tt, text="submit", command=submit)
+  
+  tkgrid(tklabel(tt,text="Enter Input"),columnspan=2)
+  tkgrid(tklabel(tt,text="Input number of differnces required"), x.entry, pady = 10, padx =10)
+  tkgrid(submit.but, reset.but)
+  
+  tkwait.window(tt)
+  return(c(x))
+}
+differeced_series <- diff(volume_ts, differences = Number_of_differences[1])
+
+# Function for Train and Test data
+
+install.packages("tcltk2")
+library(tcltk2)
+
+myvals <- inputs()
+
+inputs <- function(){
+  
+  xvar <- tclVar("")
+  yvar <- tclVar("")
+  
+  tt <- tktoplevel()
+  tkwm.title(tt,"Input Numbers")
+  x.entry <- tkentry(tt, textvariable=xvar)
+  y.entry <- tkentry(tt, textvariable=yvar)
+  
+  reset <- function()
+  {
+    tclvalue(xvar)<-""
+    tclvalue(yvar)<-""
+  }
+  
+  reset.but <- tkbutton(tt, text="Reset", command=reset)
+  
+  submit <- function() {
+    x <- as.numeric(tclvalue(xvar))
+    y <- as.numeric(tclvalue(yvar))
+    e <- parent.env(environment())
+    e$x <- x
+    e$y <- y
+    tkdestroy(tt)
+  }
+  submit.but <- tkbutton(tt, text="submit", command=submit)
+  
+  tkgrid(tklabel(tt,text="Enter Two Inputs"),columnspan=2)
+  tkgrid(tklabel(tt,text="Training Period"), x.entry, pady = 10, padx =10)
+  tkgrid(tklabel(tt,text="Test Period"), y.entry, pady = 10, padx =10)
+  tkgrid(submit.but, reset.but)
+  
+  tkwait.window(tt)
+  return(c(x,y))
+}
+
+data <- data %>% arrange(DATE_SK)
+print (min(data$month))
+print (max(data$month))
+trn.period <- myvals[1]
+tst.period <- myvals[2]
+training_data <-  data[1:trn.period, ]
+test_data <- data[(trn.period + 1):(trn.period + tst.period), ] 
+
+
+# Create_train_and_test <- function(data,myvals){
+#   # inputs()
+#   library(dplyr)
+#   data <- data %>% arrange(DATE_SK)
+#   print (min(data$month))
+#   print (max(data$month))
+#   trn.period <- myvals[1]
+#   tst.period <- myvals[2]
+#   training_data <<-  data[1:trn.period, ]
+#   test_data <<- data[(trn.period + 1):(trn.period + tst.period), ] 
+# }
+# Create_train_test(data,myvals)
+
+Create_train_and_test <- function(volume_ts,myvals){
+  # inputs()
+  library(dplyr)
+  data <- data %>% arrange(DATE_SK)
+  print (min(data$month))
+  print (max(data$month))
+  trn.period <- myvals[1]
+  tst.period <- myvals[2]
+  training_data <<-  volume_ts[1:trn.period]
+  test_data <<- volume_ts[(trn.period + 1):(trn.period + tst.period)] 
+}
+Create_train_and_test(volume_ts,myvals)
+
+
+## Ask something...
+
+
+# Pop up P,D,Q values alteration
+
+fit_arima <- auto.arima(training_data, # univariate time series
+           d = NA, # Order of first-differencing. If missing, will choose a value based on KPSS test
+           D = NA, # Order of seasonal-differencing. If missing, will choose a value based on OCSB test
+           max.p = 1, # Maximum value of p
+           max.q = 12, # Maximum value of q
+           max.P = 2,  # Maximum value of P
+           max.Q = 2,  # Maximum value of Q
+           max.d = 2,  # Maximum value of d
+           max.D = 1,  # Maximum value of D
+           start.p = 0,
+           start.q = 0,
+           start.P = 0,
+           start.Q = 0,
+           stationary = FALSE, # if TRUE, restricts search to stationary models
+           seasonal = TRUE, # if FALSE, restricts search to non-seasonal models
+           ic = c("aicc", "aic", "bic"), # Information criterion to be used in model selection
+           stepwise = TRUE, # if TRUE,will do stepwise selection (faster). Otherwise, it searches over all models. Non-stepwise selection can be very slow, especially for seasonal models
+           trace = TRUE # if TRUE, the list of ARIMA models considered will be reported
+)
+
+arimafit <- arima(data_train, order = c(1,0,0), xreg = NULL)
+a <- summary(arimafit)
+
+forecast_fit<-fitted(arimafit)
+
+# Function for InSapmple_MAPE
+InSample_mape_calc <- function(training_data,forecast_fit){
+  in_samplemape <- mean(abs((training_data - forecast_fit)/training_data))*100
+  return (in_samplemape)
+}
+InSample_mape <- InSample_mape_calc(training_data,forecast_fit)
+
+# Forecast_arima 
+forecast_arima <- predict(arimafit, n.ahead = 12)$pred
+
+
+# Function for OutSample_MAPE
+Out_Sample_mape_calc <- function(test_data,forecast_arima){
+  out_sample_mape <- mean(abs((test_data - forecast_arima[1:tst.period])/test_data))*100
+  return (out_sample_mape)
+}
+Out_Sample_mape <- Out_Sample_mape_calc(test_data,forecast_arima)
+
+# Check for the input data having any missing values
+data_check <- function(data)
+{
+  #* Establish a new 'ArgCheck' object
+  Check <- ArgumentCheck::newArgCheck()
+  
+  ## Checking for missing iput variables
+  if (missing(data))
+    ArgumentCheck::addError(
+      msg = "Invalid input.",
+      argcheck = Check
+    )
+  
+  #* Return errors and warnings (if any)
+  ArgumentCheck::finishArgCheck(Check)
+}
+data_check(data)
+
+
+# For creating time series
+
+## Function for creating time series 
+timeseries <- function(data) {
+  
+  data$DATE_SK <- dmy(as.character(data$DATE_SK))
+  data <- data %>% arrange(DATE_SK)
+  data$Volume <- data$VOLUME..KHL.
+  data$DATE_SK <- data$DATE_SK
+  
+  ## timeseries analysis
+  start_date <- min(data$DATE_SK)
+  sy <- year(start_date)
+  sm <- month(start_date)
+  
+  end_date <- max(data$DATE_SK)
+  ey <- year(end_date)
+  em <- month(end_date)
+  
+  #Converting it into a time series
+  ts_sample <- ts(data$Volume,start = c(sy, sm),end = c(ey, em),frequency = 12)
+}
+
+creating_time_series <- timeseries(data)
+
+###############################################################
+###############################################################
+
+## 1. Clearing up the workspace
+rm(list = ls())
+
+## 2. Function to install all required packages at one shot
+load.function <- function(){
+  Sys.setenv(TZ='GMT')
+  ## List all packages##
+  packagelist <- c("lubridate","plyr","dplyr","forecast","reshape","reshape2","scales","rucm","zoo",
+                   "stringi","e1071","tseries", "tsoutliers", "ArgumentCheck", "forecastHybrid", "car", "fmsb", 
+                   "MASS", "QuantPsyc", "tibble", "opera", "aTSA", "plotly", "Hmisc", "dplyr", "knitr", "tm", "svDialogs", "tcltk2")
+  
+  ## ---------- List all packages that need to be installed and will install them ---------- ##
+  newpackages <- packagelist[!(packagelist %in% installed.packages()[,"Package"])]
+  if(length(newpackages)) install.packages(newpackages, dependencies = T, repos = "http://cran.us.r-project.org")
+  
+  if ("forecastxgb" %in% installed.packages()[,"Package"] == F) {
+    if ("devtools" %in% installed.packages()[,"Package"] == F)
+      install.packages("devtools")
+    
+    library(devtools)
+    devtools::install_github("ellisp/forecastxgb-r-package/pkg")
+  }
+  
+  packagelist <- c(packagelist, "forecastxgb")
+  
+  ## ---------- List checklist of loaded packages ---------- ##
+  check.lib <- data.frame(lapply(packagelist, require, character.only = T))
+  colnames(check.lib) <- packagelist
+  return(check.lib)
+}
+
+load.function()
+
+install.packages("lubridate")
+library("lubridate")
+
+# Check for the input data having any missing values
+data_check <- function(data)
+{
+  #* Establish a new 'ArgCheck' object
+  Check <- ArgumentCheck::newArgCheck()
+  
+  ## Checking for missing iput variables
+  if (missing(data))
+    ArgumentCheck::addError(
+      msg = "Invalid input.",
+      argcheck = Check
+    )
+  
+  # Return errors and warnings (if any)
+  ArgumentCheck::finishArgCheck(Check)
+}
+data_check(data)
+
+
+## Function for creating time series 
+create_timeseries <- function(data) {
+  
+  data$DATE_SK <- dmy(as.character(data$DATE_SK))
+  data <- data %>% arrange(DATE_SK)
+  data$Volume <- data$VOLUME..KHL.
+  data$DATE_SK <- data$DATE_SK
+  
+  ## timeseries analysis
+  start_date <- min(data$DATE_SK)
+  sy <- year(start_date)
+  sm <- month(start_date)
+  
+  end_date <- max(data$DATE_SK)
+  ey <- year(end_date)
+  em <- month(end_date)
+  
+  #Converting it into a time series
+  ts_sample <- ts(data$Volume,start = c(sy, sm),end = c(ey, em),frequency = 12)
+}
+
+volume_ts <- timeseries(data)
+
+View(data)
+
+#Decomposing to look at the seasonal, trend and irregular components
+
+Decomposing_the_timeseries <- function(volume_ts){
+  decomp <- stl(volume_ts, s.window = "periodic")
+  pdf(paste(out_path,"decompostion.pdf",sep="/"))
+  plot(decomp)
+  dev.off()
+}
+Decomposing_the_timeseries(volume_ts)
+
+# Function for stationarity check 
+
+Stionary_check <- function(volume_ts){
+  # The Augmented Dickey–Fuller (ADF) t-statistic test: small p-values suggest the data is stationary and doesn’t need to be differenced stationarity
+  tseries::adf.test(volume_ts,alternative = "stationary")
+  # The Kwiatkowski-Phillips-Schmidt-Shin (KPSS) test; here accepting the null hypothesis means that the series is stationarity, and small p-values suggest that the series is not stationary and a differencing is required
+  # tseries::kpss.test(volume_ts)
+  # The Ljung-Box test examines whether there is significant evidence for non-zero correlations at lags 1-20. Small p-values (i.e., less than 0.05) suggest that the series is stationary.
+  # Box.test(volume_ts,type="Ljung-Box")
+}
+Stionary_check(volume_ts)
+
+# Function for Train and Test data
+
+install.packages("tcltk2")
+install.packages("tcltk")
+library(tcltk2)
+library(tcltk)
+
+
+myvals <- inputs()
+
+inputs <- function(){
+  
+  xvar <- tclVar("")
+  yvar <- tclVar("")
+  
+  tt <- tktoplevel()
+  tkwm.title(tt,"Input Numbers")
+  x.entry <- tkentry(tt, textvariable=xvar)
+  y.entry <- tkentry(tt, textvariable=yvar)
+  
+  reset <- function()
+  {
+    tclvalue(xvar)<-""
+    tclvalue(yvar)<-""
+  }
+  
+  reset.but <- tkbutton(tt, text="Reset", command=reset)
+  
+  submit <- function() {
+    x <- as.numeric(tclvalue(xvar))
+    y <- as.numeric(tclvalue(yvar))
+    e <- parent.env(environment())
+    e$x <- x
+    e$y <- y
+    tkdestroy(tt)
+  }
+  submit.but <- tkbutton(tt, text="submit", command=submit)
+  
+  tkgrid(tklabel(tt,text="Enter Two Inputs"),columnspan=2)
+  tkgrid(tklabel(tt,text="Training Period"), x.entry, pady = 10, padx =10)
+  tkgrid(tklabel(tt,text="Test Period"), y.entry, pady = 10, padx =10)
+  tkgrid(submit.but, reset.but)
+  
+  tkwait.window(tt)
+  return(c(x,y))
+}
+View(data)
+data <- data %>% arrange(DATE_SK)
+print (min(data$month))
+print (max(data$month))
+trn.period <- myvals[1]
+tst.period <- myvals[2]
+training_data <-  data[1:trn.period, ]
+test_data <- data[(trn.period + 1):(trn.period + tst.period), ] 
+
+Create_train_and_test <- function(volume_ts,myvals){
+  library(dplyr)
+  data <- data %>% arrange(DATE_SK)
+  # print (min(data$month))
+  # print (max(data$month))
+  trn.period <- myvals[1]
+  tst.period <- myvals[2]
+  training_data <-  data[1:trn.period, ]
+  test_data <- data[(trn.period + 1):(trn.period + tst.period), ] 
+}
+Create_train_and_test(volume_ts,myvals)
+
+# Function for InSapmple_MAPE
+InSample_mape_calc <- function(training_data,forecast_fit){
+  in_samplemape <- mean(abs((training_data - forecast_fit)/training_data))*100
+  return (in_samplemape)
+}
+InSample_mape <- InSample_mape_calc(training_data,forecast_fit)
+
+
+# Function for OutSample_MAPE
+Out_Sample_mape_calc <- function(test_data,forecast_arima){
+  out_sample_mape <- mean(abs((test_data - forecast_arima[1:tst.period])/test_data))*100
+  return (out_sample_mape)
+}
+Out_Sample_mape <- Out_Sample_mape_calc(test_data,forecast_arima)
+
+forecast_fit<-fitted(arimafit)
+MAPE_In <- mean(abs((forecast_fit - training_data)/training_data))*100
+
+j=0
+p <- 0
+dif <- 0
+q <- 0
+P <- 0
+Q <- 0
+for (p in 0:2){
+  for(q in 0:2){
+    for (P in 1){
+      for (Q in 0:1){
+        for(dif in 0:1){
+          
+          fit<-arima((training_data),order=c(1,0,0),seasonal = list(order=c(0,0,0),period=12),method="ML")
+          
+          # forecast_fit<-fitted(arimafit)
+          # MAPE_In <- mean(abs((forecast_fit - training_data)/training_data))*100
+          # 
+          d_i <- (training_data) - fit$residuals
+          res <- training_data - (d_i)
+          d <- sum(abs(res/training_data))
+          MAPE_In <- (100 * d)/25
+          
+          
+          if(j==0)
+          {
+            pred<-predict(fit,n.ahead=length(test_data))
+            accu<-accuracy(ts((pred$pred)),ts(test_data))
+            out<-rbind(list=c(arimaorder(fit),accu[5],fit$aic,MAPE_In))
+            arimax_output<-data.frame(out)
+            j=j+1
+          }
+          else
+          {
+            pred<-predict(fit,n.ahead=length(test_data))
+            accu<-accuracy(ts((pred$pred)),ts(test_data))
+            out<-rbind(list=c(arimaorder(fit),accu[5],fit$aic,MAPE_In))
+            arimax_output<-rbind(arimax_output,data.frame(out))
+            
+          }
+        }
+      }
+    }
+  }
+}
+colnames(arimax_output)<-c("p","d","q","P","D","Q","Period","Outsample MAPE","AIC","Insample MAPE")
+View(arimax_output)
